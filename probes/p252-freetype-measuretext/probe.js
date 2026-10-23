@@ -1,16 +1,31 @@
 // p252 — FreeType measureText Info Leak Probe
 // PS5 14.10 — CVE-2026-43720 companion: leak heap data via corrupted TrueType hmtx
 //
+// STATUS: THEORY FLAWED — deploy as a test, not a known-good primitive.
+//
+// Known issue (NeonStride, Oct 23): FreeType's FT_Stream_ReadAt bounds-checks
+// stream reads against file size (= ArrayBuffer byteLength). Even with buffer
+// truncation (font ends before declared hmtx extent), FreeType likely rejects
+// the font (LOAD-ERR) rather than reading OOB. JS ArrayBuffer is also
+// zero-initialized, so any in-buffer overflow reads zeros, not heap data.
+//
+// This probe is still worth deploying as a TEST: if PS5's FreeType build has
+// a bounds-check bug or processes hmtx differently, T2/T4 widths diverging
+// from T1 baseline = confirmed leak. Expected result: LOAD-ERR on T2/T4.
+// Deploy AFTER v600 results are in (v600 = primary info leak path).
+//
 // Theory: FontFace API loads fonts from ArrayBuffer (confirmed p161a T13).
 // FreeType parses hmtx to get glyph advance widths. If hmtx table directory
 // entry claims a larger length than actual data, FreeType reads OOB into
 // adjacent heap memory. measureText() returns widths derived from that OOB
 // data as JS numbers.
 //
-// Three test phases:
+// Four test phases:
 //   T1: Baseline valid font — sanity check measureText works
 //   T2: hmtx table length overflow — directory says 1024B, actual data 64B
+//        (font truncated: hmtx declared extent past EOF)
 //   T3: hhea numberOfHMetrics overflow — hhea says 256, only 16 entries exist
+//   T4: Combined — both hmtx length and hhea overflow
 //
 // Replace CALLBACK_IP with your listener address.
 
